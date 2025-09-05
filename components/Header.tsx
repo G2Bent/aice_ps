@@ -21,11 +21,11 @@ const Header: React.FC<HeaderProps> = ({ activeView, onViewChange, onOpenSetting
               <button onClick={() => onViewChange('editor')} className={`flex items-center gap-3 transition-colors p-2 -m-2 rounded-lg ${activeView === 'editor' ? 'text-white' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}>
                 <SparkleIcon className="w-6 h-6 text-blue-400" />
                 <h1 className="text-xl font-bold tracking-tight">
-                  Aice PS
+                  Image AI
                 </h1>
               </button>
 
-              <div className="h-6 w-px bg-gray-600"></div>
+              {/* <div className="h-6 w-px bg-gray-600"></div>
 
               <button onClick={() => onViewChange('past-forward')} className={`flex items-center gap-3 transition-colors p-2 -m-2 rounded-lg ${activeView === 'past-forward' ? 'text-white' : 'text-gray-400 hover:text-white hover:bg-white/10'}`}>
                 <ClockIcon className="w-6 h-6 text-yellow-400" />
@@ -58,7 +58,7 @@ const Header: React.FC<HeaderProps> = ({ activeView, onViewChange, onOpenSetting
                 <h1 className="text-xl font-bold tracking-tight">
                   【自部署版本APP】国内可用
                 </h1>
-              </a>
+              </a> */}
 
           </div>
           <div className="flex items-center gap-2">
@@ -78,7 +78,7 @@ const Header: React.FC<HeaderProps> = ({ activeView, onViewChange, onOpenSetting
             >
               <CogIcon className="w-6 h-6" />
             </button>
-            <a
+            {/* <a
               href="https://github.com/aigem/aice_ps"
               target="_blank"
               rel="noopener noreferrer"
@@ -87,7 +87,7 @@ const Header: React.FC<HeaderProps> = ({ activeView, onViewChange, onOpenSetting
               title="GitHub Repository"
             >
               <GitHubIcon className="w-6 h-6" />
-            </a>
+            </a> */}
           </div>
       </div>
     </header>

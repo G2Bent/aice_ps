@@ -23,18 +23,18 @@ const HelpModal: React.FC<HelpModalProps> = ({ isOpen, onClose }) => {
 
         <h2 className="text-2xl font-bold mb-4">帮助</h2>
         
-        <p className="text-gray-300">
+        {/* <p className="text-gray-300">
             有任何建议及疑问 <a href="https://github.com/aigem/aice_ps/issues/new/choose" target="_blank" rel="noopener noreferrer" className="font-bold underline text-blue-400 hover:text-blue-300">[ 请提ISSUE ]</a>
-        </p>
+        </p> */}
         <p className="text-gray-300">
           注意：如果使用官方Gemini API，是会产生费用的。请谨慎使用。
         </p>
-        <p className="text-gray-300">
+        {/* <p className="text-gray-300">
            <a href="https://cnb.build/no.1/api/-/issues/2" target="_blank" rel="noopener noreferrer" className="font-bold underline hover:text-cyan-200">极具性价比API平台</a>。
         </p>
         <p className="text-gray-300">
            <a href="https://cnb.build/no.1/api/-/issues/1" target="_blank" rel="noopener noreferrer" className="font-bold underline hover:text-cyan-200">欢迎交流及定制</a>。
-        </p>
+        </p> */}
       </div>
     </div>
   );

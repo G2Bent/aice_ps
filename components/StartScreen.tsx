@@ -159,7 +159,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onFileSelect, onImageGenerate
       </h1>
       <div className="max-w-2xl text-lg text-gray-400 md:text-xl flex flex-col gap-2">
         <h3 className="text-3xl font-extrabold tracking-tight text-gray-100 sm:text-4xl md:text-5xl">至强改图模型&超好用应用</h3>
-        <p className="font-semibold text-yellow-300">用AiStudio后台API免费用,也<a href="https://nb.kuai.host/">可 [自行部署]（Gemini API兼容）</a></p>
+        {/* <p className="font-semibold text-yellow-300">用AiStudio后台API免费用</p> */}
       </div>
       
       <div className="w-full max-w-5xl mt-8 grid grid-cols-1 md:grid-cols-10 gap-6 items-stretch">

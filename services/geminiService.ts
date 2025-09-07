@@ -252,7 +252,31 @@ export const generateImageFromText = async (prompt: string, aspectRatio: string)
         }
         throw new Error('AI 未能生成图片。');
     } catch (e) {
-        throw handleApiError(e, '生成图片');
+        // Fallback: 使用 gemini-2.5-flash-image-preview 直接根据文本生成图片
+        // 该路径无需 Imagen 付费能力；通过纯文本 part 请求图像输出
+        try {
+            const ai = getGoogleAI();
+            const fallbackResponse: GenerateContentResponse = await ai.models.generateContent({
+                model: 'gemini-2.5-flash-image-preview',
+                contents: { parts: [{ text: prompt }] },
+                config: { responseModalities: [Modality.IMAGE, Modality.TEXT] },
+            });
+            const fallbackCandidate = fallbackResponse.candidates?.[0];
+            if (fallbackCandidate?.content?.parts) {
+                for (const part of fallbackCandidate.content.parts) {
+                    if (part.inlineData) {
+                        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                    }
+                }
+            }
+            // 若 fallback 返回文本，沿用统一错误处理
+            if (fallbackCandidate?.content?.parts?.[0]?.text) {
+                throw new Error("Model responded with text instead of an image. The prompt may have been blocked.");
+            }
+            throw new Error('AI 未能返回预期的图片结果。');
+        } catch (fallbackErr) {
+            throw handleApiError(fallbackErr, '生成图片');
+        }
     }
 };
 

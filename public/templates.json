@@ -1,33 +1,65 @@
 [
   {
-    "id": "template-figurine-design",
-    "name": "热门手办",
+    "id": "template-add-decoration",
+    "name": "添加装饰",
     "iconUrl": "/images/1.1.jpg",
     "baseUrl": "/images/1.jpg",
+    "description": "一键添加装饰!Hot!",
+    "prompt": "Using the provided image of my cat, please add a small, knitted wizard hat on its head. Make it look like it's sitting comfortably and matches the soft lighting of the photo."
+  },
+  {
+    "id": "template-figurine-design",
+    "name": "热门手办",
+    "iconUrl": "/images/11.1.jpg",
+    "baseUrl": "/images/11.jpg",
     "description": "一键生成精致手办!Hot!",
     "prompt": "Create a 1/7 scale commercialized figurine of the characters in the picture, in a realistic style, in a real environment. The figurine is placed on a computer desk. The figurine has a round transparent acrylic base, with no text on the base. The content on the computer screen is a 3D modeling process of this figurine. Next to the computer screen is a toy packaging box, designed in a style reminiscent of high-quality collectible figures, printed with original artwork. The packaging features two-dimensional flat illustrations."
   },
   {
-    "id": "template-photo-fix",
-    "name": "旧照片修复",
+    "id": "template-photo-change-color",
+    "name": "照片换颜色",
     "iconUrl": "/images/2.1.jpg",
     "baseUrl": "/images/2.jpg",
+    "description": "一键换色!专业!惊艳!",
+    "prompt": "Using the provided image of a living room, change only the blue sofa to be a vintage, brown leather chesterfield sofa. Keep the rest of the room, including the pillows on the sofa and the lighting, unchanged."
+  },
+  {
+    "id": "template-photo-fix",
+    "name": "旧照片修复",
+    "iconUrl": "/images/12.1.jpg",
+    "baseUrl": "/images/12.jpg",
     "description": "一键修复旧照片!专业!惊艳!",
     "prompt": "This is a technical and stylistic re-rendering of a vintage photograph. The goal is to make this exact scene—with the same people, outfits, poses, and scenery—look as if it were captured today by an elite portrait photographer using modern, professional equipment and a vibrant color grading style. Do not change any element of the scene; instead, fundamentally transform the quality of the image capture itself. 1. Vibrant, Saturated Color Science (New Priority): This is the most important instruction: The color grading must be completely modernized, vibrant, and deeply saturated. Remove every trace of the original's faded, vintage color cast. The final colors should pop with life and energy, emulating a modern digital camera using a 'Vivid' color profile. Specifically: Make any floral patterns rich and bold. Render solid colors as strong, clean, and striking. Ensure all skin tones are warm, healthy, and full of life—completely avoiding a pale, washed-out, or muted appearance. 2. Lighting Transformation: Completely discard the original's harsh, on-camera flash lighting. Re-light the entire scene as if using a professional, off-camera studio setup. Create a large, soft key light from the front-left to sculpt the subjects' faces with gentle, flattering shadows, creating depth and dimension. Add a subtle fill light from the right to soften the shadows. Eliminate the harsh glare on any glasses and create bright, sparkling catchlights in everyone's eyes. 3. Hyper-Realistic Detail and Texture: Render the image with extreme 8K clarity. Skin must look natural, retaining age-appropriate pores and fine lines—strictly avoid a plastic or airbrushed appearance. The fabric textures must be hyper-defined: clearly show any intricate knitting, weaves of patterns, and texture of upholstery. Any wallpaper pattern should be sharp and clear. 4. Modern Camera and Lens Optics: The final image must look like it was captured on a high-end, full-frame digital camera with a sharp 85mm prime lens to create a subtle, natural separation between the subjects and the background. Ensure the dynamic range is wide, with deep, rich blacks and clean, controlled highlights."
   },
   {
-    "id": "template-pvc",
-    "name": "PVC玩具",
+    "id": "template-style-migrate",
+    "name": "风格迁移",
     "iconUrl": "/images/3.1.jpg",
     "baseUrl": "/images/3.jpg",
+    "description": "风格迁移!专业!惊艳!",
+    "prompt": "Using the provided image of a living room, change only the blue sofa to be a vintage, brown leather chesterfield sofa. Keep the rest of the room, including the pillows on the sofa and the lighting, unchanged."
+  },
+  {
+    "id": "template-pvc",
+    "name": "PVC玩具",
+    "iconUrl": "/images/9.1.jpg",
+    "baseUrl": "/images/9.jpg",
     "description": "逼真的工艺技术制作出来的塑料模型",
     "prompt": "Transform this illustration into a photorealistic PVC anime figure. Keep the original character’s design, pose, and colors exactly the same. Render it as a collectible figurine made of PVC plastic, with realistic painted surface and detailed shading. Apply glossy highlights on areas such as the hair and clothing, matte finish on the skin, and subtle seam lines as seen in real manufactured figures. Place the figure on a simple round display base, with a soft shadow cast beneath it. Use a neutral studio background, professional studio lighting, sharp focus, shallow depth of field, as if photographed for a catalog."
   },
   {
-    "id": "template-home-design",
-    "name": "软装设计师",
+    "id": "template-clothing-change",
+    "name": "一件换衣服",
     "iconUrl": "/images/4.1.jpg",
     "baseUrl": "/images/4.jpg",
+    "description": "一件换衣服!专业!惊艳!",
+    "prompt": "Create a professional e-commerce fashion photo. Take the blue floral dress from the first image and let the woman from the second image wear it. Generate a realistic, full-body shot of the woman wearing the dress, with the lighting and shadows adjusted to match the outdoor environment."
+  },
+  {
+    "id": "template-home-design",
+    "name": "软装设计师",
+    "iconUrl": "/images/10.1.jpg",
+    "baseUrl": "/images/10.jpg",
     "description": "软装设计动动嘴就完成!",
     "prompt": "This is a photo of an empty living room [Empty Room Photo]. Redesign it in a cozy Scandinavian style. Add a light grey fabric sofa, a natural oak wood coffee table, several green potted plants, and a large, soft wool rug. The lighting should be bright and airy, coming from the window."
   },

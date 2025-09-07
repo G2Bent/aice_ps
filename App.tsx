@@ -685,13 +685,77 @@ const App: React.FC = () => {
   const [editorInitialState, setEditorInitialState] = useState<EditorInitialState | null>(null);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
 
+  // --- Simple hash-based navigation helpers to enable browser back/forward ---
+  const HASH_PREFIX = '#/';
+  const parseHash = (): { view: View; id?: string } => {
+    const hash = window.location.hash || '';
+    if (hash.startsWith(HASH_PREFIX)) {
+      const path = hash.slice(HASH_PREFIX.length); // e.g. template-display/xyz
+      const [viewPart, id] = path.split('/');
+      const view = (viewPart as View) || 'editor';
+      if (view === 'editor' || view === 'past-forward' || view === 'beatsync' || view === 'template-library' || view === 'template-display') {
+        return { view, id };
+      }
+    }
+    return { view: 'editor' };
+  };
+  const navigateToView = (view: View, params?: { id?: string }) => {
+    const targetHash = `${HASH_PREFIX}${view}${params?.id ? `/${encodeURIComponent(params.id)}` : ''}`;
+    if (window.location.hash !== targetHash) {
+      window.location.hash = targetHash; // triggers hashchange
+    }
+    setActiveView(view);
+  };
+  const loadTemplateById = async (id: string): Promise<Template | null> => {
+    try {
+      const res = await fetch('/templates.json');
+      if (!res.ok) return null;
+      const list: Template[] = await res.json();
+      return list.find(t => t.id === id) || null;
+    } catch {
+      return null;
+    }
+  };
+  useEffect(() => {
+    const applyFromHash = async () => {
+      const { view, id } = parseHash();
+      setActiveView(view);
+      if (view === 'template-display') {
+        if (id) {
+          // If deep-linked with id, ensure selectedTemplate is loaded
+          if (!selectedTemplate || selectedTemplate.id !== id) {
+            const t = await loadTemplateById(id);
+            if (t) {
+              setSelectedTemplate(t);
+            } else {
+              navigateToView('template-library');
+            }
+          }
+        } else {
+          // No id provided, go to library
+          navigateToView('template-library');
+        }
+      } else {
+        setSelectedTemplate(null);
+        if (view !== 'editor') {
+          setEditorInitialState(null);
+        }
+      }
+    };
+    // initialize from current hash
+    applyFromHash();
+    const handler = () => { applyFromHash(); };
+    window.addEventListener('hashchange', handler);
+    return () => window.removeEventListener('hashchange', handler);
+  }, [selectedTemplate]);
+
   const handleTemplateSelect = (template: Template) => {
     setSelectedTemplate(template);
-    setActiveView('template-display');
+    navigateToView('template-display', { id: template.id });
   };
   
   const handleShowTemplateLibrary = () => {
-    setActiveView('template-library');
+    navigateToView('template-library');
   };
 
   const handleTemplateLoaded = useCallback(() => {
@@ -701,7 +765,7 @@ const App: React.FC = () => {
   const handleUseTemplateInEditor = (template: Template) => {
     setEditorInitialState({ baseImageUrl: template.baseUrl, prompt: template.prompt });
     setSelectedTemplate(null);
-    setActiveView('editor');
+    navigateToView('editor');
   };
   
   // Dummy handlers to satisfy the EditorView props, as its internal state is now self-contained.
@@ -728,7 +792,7 @@ const App: React.FC = () => {
                     template={selectedTemplate}
                     onBack={() => {
                         setSelectedTemplate(null);
-                        setActiveView('template-library');
+                        navigateToView('template-library');
                     }}
                     onUseInEditor={handleUseTemplateInEditor}
                 />
@@ -757,7 +821,7 @@ const App: React.FC = () => {
                 setEditorInitialState(null);
                 setSelectedTemplate(null);
             }
-            setActiveView(view)
+            navigateToView(view);
         }} 
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenHelp={() => setIsHelpModalOpen(true)}

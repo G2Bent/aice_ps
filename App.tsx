@@ -24,6 +24,7 @@ import PastForwardPage from './components/PastForwardPage';
 import BeatSyncPage from './components/BeatSyncPage';
 import TemplateLibraryPage from './components/TemplateLibraryPage';
 import TemplateDisplayPage from './components/TemplateDisplayPage';
+import { Analytics } from '@vercel/analytics/react';
 
 // Helper to convert a data URL string to a File object
 const dataURLtoFile = (dataurl: string, filename: string): File => {
@@ -829,6 +830,7 @@ const App: React.FC = () => {
       <main className="flex-1 flex flex-col items-center justify-center p-4 md:p-8">
         <MainContent />
       </main>
+      <Analytics />
       <SettingsModal
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}

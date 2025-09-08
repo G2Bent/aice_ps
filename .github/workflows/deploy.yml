@@ -92,14 +92,13 @@ jobs:
               # 允许较大的请求体，便于图片上传/处理
               client_max_body_size 32m;
 
-              # 反向代理到 Google Gemini，供前端通过同域访问
+              # 反向代理到上游（自建大陆可达反代）
               location /genai/ {
-                proxy_pass https://generativelanguage.googleapis.com/;
+                proxy_pass http://124.156.242.227/;
                 proxy_set_header Host generativelanguage.googleapis.com;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-For $server_addr;
                 proxy_set_header X-Forwarded-Proto $scheme;
                 proxy_http_version 1.1;
-                proxy_ssl_server_name on;
                 proxy_read_timeout 300s;
                 proxy_connect_timeout 60s;
                 proxy_send_timeout 300s;
@@ -151,14 +150,13 @@ jobs:
               # 允许较大的请求体
               client_max_body_size 32m;
 
-              # 反向代理到 Google Gemini（在 HTTP 阶段仅用于 ACME 校验及跳转前的直连调试）
+              # 反向代理到上游（自建大陆可达反代）
               location /genai/ {
-                proxy_pass https://generativelanguage.googleapis.com/;
+                proxy_pass http://124.156.242.227/;
                 proxy_set_header Host generativelanguage.googleapis.com;
                 proxy_set_header X-Forwarded-For $server_addr;
                 proxy_set_header X-Forwarded-Proto $scheme;
                 proxy_http_version 1.1;
-                proxy_ssl_server_name on;
                 proxy_read_timeout 300s;
                 proxy_connect_timeout 60s;
                 proxy_send_timeout 300s;
@@ -193,14 +191,13 @@ jobs:
               # 允许较大的请求体，便于图片上传/处理
               client_max_body_size 32m;
 
-              # 反向代理到 Google Gemini，供前端通过同域访问
+              # 反向代理到上游（自建大陆可达反代）
               location /genai/ {
-                proxy_pass https://generativelanguage.googleapis.com/;
+                proxy_pass http://124.156.242.227/;
                 proxy_set_header Host generativelanguage.googleapis.com;
-                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-For $server_addr;
                 proxy_set_header X-Forwarded-Proto $scheme;
                 proxy_http_version 1.1;
-                proxy_ssl_server_name on;
                 proxy_read_timeout 300s;
                 proxy_connect_timeout 60s;
                 proxy_send_timeout 300s;

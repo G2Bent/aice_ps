@@ -9,6 +9,42 @@ let aiInstance: GoogleGenAI | null = null;
 let lastUsedApiKey: string | null = null;
 let lastUsedBaseUrl: string | undefined | null = null;
 
+// 设置fetch拦截器
+if (typeof window !== 'undefined') {
+    const baseUrl = 'http://124.156.242.227';
+    console.log('Setting up fetch interceptor with baseUrl:', baseUrl);
+    
+    const originalFetch = window.fetch;
+    window.fetch = function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+        let url: string;
+        if (typeof input === 'string') {
+            url = input;
+        } else if (input instanceof URL) {
+            url = input.toString();
+        } else {
+            url = input.url;
+        }
+        
+        console.log('Fetch request to:', url);
+        
+        // 如果请求的是Google API，重定向到我们的代理服务器
+        if (url.includes('generativelanguage.googleapis.com')) {
+            const newUrl = url.replace('https://generativelanguage.googleapis.com', baseUrl);
+            console.log('Redirecting request from', url, 'to', newUrl);
+            
+            if (typeof input === 'string') {
+                return originalFetch(newUrl, init);
+            } else if (input instanceof URL) {
+                return originalFetch(new URL(newUrl), init);
+            } else {
+                return originalFetch({ ...input, url: newUrl }, init);
+            }
+        }
+        
+        return originalFetch(input, init);
+    };
+}
+
 // Function to get the current API key
 const getApiKey = (): string | null => {
     // Prioritize user-provided key from localStorage
@@ -34,15 +70,18 @@ const getBaseUrl = (): string | undefined => {
     } catch(e) {
       console.warn("Could not access localStorage for API base URL.", e);
     }
-    // 在生产环境默认通过本域反向代理，避免中国大陆直连被墙域名
+    // 默认使用自定义反向代理服务器，避免中国大陆直连被墙域名
     if (typeof window !== 'undefined') {
         const hostname = window.location.hostname;
         const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.local');
         if (!isLocalhost) {
             return `${window.location.origin}/genai`;
+        } else {
+            // 本地开发时也使用反向代理服务器
+            return 'http://124.156.242.227';
         }
     }
-    return undefined; // Return undefined to use the default endpoint in本地开发
+    return 'http://124.156.242.227'; // 默认使用反向代理服务器
 }
 
 
@@ -53,15 +92,15 @@ const getGoogleAI = (): GoogleGenAI => {
         throw new Error("找不到 API 密钥。请在设置中输入您的密钥，或确保系统 API 密钥已在环境中正确设置。");
     }
     const baseUrl = getBaseUrl();
+    console.log('Base URL:', baseUrl); // 调试信息
     
-    // Re-initialize if the API key or base URL has changed, or if there's no instance
-    if (!aiInstance || apiKey !== lastUsedApiKey || baseUrl !== lastUsedBaseUrl) {
+    // Re-initialize if the API key has changed, or if there's no instance
+    if (!aiInstance || apiKey !== lastUsedApiKey) {
       try {
-        const config: { apiKey: string, apiEndpoint?: string } = { apiKey };
-        if (baseUrl) {
-            config.apiEndpoint = baseUrl;
-        }
+        const config = { apiKey };
+        console.log('Creating GoogleGenAI instance with config:', config);
         aiInstance = new GoogleGenAI(config);
+        console.log('GoogleGenAI instance created:', aiInstance);
         lastUsedApiKey = apiKey;
         lastUsedBaseUrl = baseUrl;
       } catch(e) {

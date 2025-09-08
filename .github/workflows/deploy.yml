@@ -98,10 +98,6 @@ jobs:
               location / {
                 try_files $uri $uri/ /index.html;
               }
-
-              types {
-                application/wasm wasm;
-              }
             }
             EOF
             sed -i "s/__DOMAIN__/$DOMAIN/g" "$NGINX_CONF"
@@ -145,10 +141,6 @@ jobs:
               location / {
                 return 301 https://$host$request_uri;
               }
-
-              types {
-                application/wasm wasm;
-              }
             }
 
             # HTTPS server
@@ -168,10 +160,6 @@ jobs:
 
               location / {
                 try_files $uri $uri/ /index.html;
-              }
-
-              types {
-                application/wasm wasm;
               }
             }
             EOF

@@ -39,6 +39,7 @@ jobs:
             DOMAIN="${{ secrets.SERVER_DOMAIN }}"
             EMAIL="${{ secrets.ACME_CONTACT_EMAIL }}"
             [ -z "$DOMAIN" ] && { echo "SERVER_DOMAIN secret 未设置"; exit 1; }
+            APEX_DOMAIN=$(echo "$DOMAIN" | sed -E 's/^www\.//')
 
             mkdir -p /var/www/aice-ps
             mkdir -p /etc/nginx/ssl
@@ -83,7 +84,7 @@ jobs:
             cat > "$NGINX_CONF" <<'EOF'
             server {
               listen 80;
-              server_name __DOMAIN__;
+              server_name __DOMAIN__ __APEX__;
 
               root /var/www/aice-ps;
               index index.html;
@@ -104,18 +105,19 @@ jobs:
             }
             EOF
             sed -i "s/__DOMAIN__/$DOMAIN/g" "$NGINX_CONF"
+            sed -i "s/__APEX__/$APEX_DOMAIN/g" "$NGINX_CONF"
             nginx -t
             systemctl restart nginx || service nginx restart || true
 
-            # 安装 acme.sh（若未安装），并使用 webroot 签发证书
+            # 安装 acme.sh（若未安装），并使用 webroot 为两个域名签发证书
             if [ ! -d "$HOME/.acme.sh" ]; then
-              curl -s https://get.acme.sh | sh -s email=${EMAIL:-admin@${DOMAIN}}
+              curl -s https://get.acme.sh | sh -s email=${EMAIL:-admin@${APEX_DOMAIN}}
               export PATH="$HOME/.acme.sh:$PATH"
             fi
             if [ -f "$HOME/.acme.sh/acme.sh" ]; then
               export PATH="$HOME/.acme.sh:$PATH"
               acme.sh --set-default-ca --server letsencrypt || true
-              acme.sh --issue --webroot /var/www/aice-ps -d "$DOMAIN" || true
+              acme.sh --issue --webroot /var/www/aice-ps -d "$DOMAIN" -d "$APEX_DOMAIN" || true
               acme.sh --install-cert -d "$DOMAIN" \
                 --key-file       /etc/nginx/ssl/${DOMAIN}.key \
                 --fullchain-file /etc/nginx/ssl/${DOMAIN}.crt \
@@ -129,7 +131,7 @@ jobs:
             # HTTP server: 仅用于 ACME 校验与 301 跳转
             server {
               listen 80;
-              server_name __DOMAIN__;
+              server_name __DOMAIN__ __APEX__;
 
               root /var/www/aice-ps;
               index index.html;
@@ -152,7 +154,7 @@ jobs:
             # HTTPS server
             server {
               listen 443 ssl;
-              server_name __DOMAIN__;
+              server_name __DOMAIN__ __APEX__;
               http2 on;
 
               ssl_certificate     /etc/nginx/ssl/__DOMAIN__.crt;
@@ -174,6 +176,7 @@ jobs:
             }
             EOF
             sed -i "s/__DOMAIN__/$DOMAIN/g" "$NGINX_CONF"
+            sed -i "s/__APEX__/$APEX_DOMAIN/g" "$NGINX_CONF"
             nginx -t
             systemctl restart nginx || service nginx restart || true
 
@@ -196,8 +199,58 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           password: ${{ secrets.SERVER_PASSWORD }}
           port: 22
-          source: "dist/*"
+          source: "dist/**"
           target: "/var/www/aice-ps"
+          strip_components: 1
+
+      - name: Debug remote state
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: 22
+          script: |
+            set -e
+            echo "== ls -la /var/www/aice-ps =="
+            ls -la /var/www/aice-ps || true
+            echo "== head index.html =="
+            head -n 20 /var/www/aice-ps/index.html || true
+            echo "== nginx -T (grep aice-ps) =="
+            nginx -T 2>/dev/null | sed -n '/aice-ps/,/}/p' || true
+
+      - name: Fix ownership, permissions and SELinux context
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: 22
+          script: |
+            set -e
+            # 统一属主为 nginx 运行用户
+            NGINX_USER=$(id -u www-data >/dev/null 2>&1 && echo www-data || echo nginx)
+            chown -R $NGINX_USER:$NGINX_USER /var/www/aice-ps
+            find /var/www/aice-ps -type d -exec chmod 755 {} +
+            find /var/www/aice-ps -type f -exec chmod 644 {} +
+
+            # 若启用 SELinux，设置正确的安全上下文
+            if command -v selinuxenabled >/dev/null 2>&1 && selinuxenabled; then
+              if command -v semanage >/dev/null 2>&1; then
+                semanage fcontext -a -t httpd_sys_content_t "/var/www/aice-ps(/.*)?" || true
+              else
+                # 某些系统 semanage 未装，尝试安装
+                if command -v yum >/dev/null 2>&1; then
+                  yum install -y policycoreutils-python-utils || yum install -y policycoreutils-python || true
+                elif command -v dnf >/dev/null 2>&1; then
+                  dnf install -y policycoreutils-python-utils || true
+                elif command -v apt-get >/dev/null 2>&1; then
+                  apt-get update -y && apt-get install -y policycoreutils || true
+                fi
+                command -v semanage >/dev/null 2>&1 && semanage fcontext -a -t httpd_sys_content_t "/var/www/aice-ps(/.*)?" || true
+              fi
+              restorecon -Rv /var/www/aice-ps || true
+            fi
 
       - name: Validate and restart Nginx
         uses: appleboy/ssh-action@v1.0.3

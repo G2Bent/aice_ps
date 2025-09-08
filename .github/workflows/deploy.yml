@@ -1,0 +1,192 @@
+name: Deploy Aice PS
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          # 可选：如需在前端打包时注入默认 key（注意会暴露在前端）
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Provision server (nginx, firewall, dir, ssl via acme.sh)
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: 22
+          script: |
+            set -e
+            DOMAIN="${{ secrets.SERVER_DOMAIN }}"
+            EMAIL="${{ secrets.ACME_CONTACT_EMAIL }}"
+            [ -z "$DOMAIN" ] && { echo "SERVER_DOMAIN secret 未设置"; exit 1; }
+
+            mkdir -p /var/www/aice-ps
+            mkdir -p /etc/nginx/ssl
+
+            # 安装 Nginx（根据系统包管理器自动选择）并开放端口
+            if command -v apt-get >/dev/null 2>&1; then
+              DEBIAN_FRONTEND=noninteractive apt-get update -y
+              DEBIAN_FRONTEND=noninteractive apt-get install -y nginx curl socat sed
+              systemctl enable nginx || true
+              if command -v ufw >/dev/null 2>&1; then
+                ufw allow 80/tcp || true
+                ufw allow 443/tcp || true
+              fi
+            elif command -v yum >/dev/null 2>&1; then
+              yum install -y epel-release || true
+              yum install -y nginx curl socat sed
+              systemctl enable nginx || true
+              if command -v firewall-cmd >/dev/null 2>&1; then
+                firewall-cmd --add-service=http --permanent || true
+                firewall-cmd --add-service=https --permanent || true
+                firewall-cmd --reload || true
+              fi
+            elif command -v dnf >/dev/null 2>&1; then
+              dnf install -y nginx curl socat sed
+              systemctl enable nginx || true
+              if command -v firewall-cmd >/dev/null 2>&1; then
+                firewall-cmd --add-service=http --permanent || true
+                firewall-cmd --add-service=https --permanent || true
+                firewall-cmd --reload || true
+              fi
+            fi
+
+            # 写入 Nginx 配置模板（保留变量占位，后续统一替换）
+            if [ -d /etc/nginx/conf.d ]; then
+              NGINX_CONF="/etc/nginx/conf.d/aice-ps.conf"
+            else
+              mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled || true
+              NGINX_CONF="/etc/nginx/sites-available/aice-ps"
+            fi
+
+            cat > "$NGINX_CONF" <<'EOF'
+            # HTTP server: 用于 ACME 校验并 301 跳转到 HTTPS
+            server {
+              listen 80;
+              server_name __DOMAIN__;
+
+              root /var/www/aice-ps;
+              index index.html;
+
+              location ^~ /.well-known/acme-challenge/ {
+                root /var/www/aice-ps;
+                default_type "text/plain";
+                allow all;
+              }
+
+              location / {
+                return 301 https://$host$request_uri;
+              }
+
+              types {
+                application/wasm wasm;
+              }
+            }
+
+            # HTTPS server
+            server {
+              listen 443 ssl http2;
+              server_name __DOMAIN__;
+
+              ssl_certificate     /etc/nginx/ssl/__DOMAIN__.crt;
+              ssl_certificate_key /etc/nginx/ssl/__DOMAIN__.key;
+
+              ssl_protocols TLSv1.2 TLSv1.3;
+              ssl_ciphers HIGH:!aNULL:!MD5;
+
+              root /var/www/aice-ps;
+              index index.html;
+
+              location / {
+                try_files $uri $uri/ /index.html;
+              }
+
+              types {
+                application/wasm wasm;
+              }
+            }
+            EOF
+
+            # 适配 sites-enabled 软链接
+            if [ "$NGINX_CONF" = "/etc/nginx/sites-available/aice-ps" ]; then
+              ln -sf /etc/nginx/sites-available/aice-ps /etc/nginx/sites-enabled/aice-ps || true
+            fi
+
+            # 用实际域名替换占位符（保持 $uri 等 Nginx 变量不被提前展开）
+            sed -i "s/__DOMAIN__/$DOMAIN/g" "$NGINX_CONF"
+
+            nginx -t
+            systemctl restart nginx || service nginx restart || true
+
+            # 安装 acme.sh（若未安装）
+            if [ ! -d "$HOME/.acme.sh" ]; then
+              curl -s https://get.acme.sh | sh -s email=${EMAIL:-admin@${DOMAIN}}
+              export PATH="$HOME/.acme.sh:$PATH"
+            fi
+            if [ -f "$HOME/.acme.sh/acme.sh" ]; then
+              export PATH="$HOME/.acme.sh:$PATH"
+              acme.sh --set-default-ca --server letsencrypt || true
+              # 申请或续签证书（webroot 模式，使用 /var/www/aice-ps）
+              acme.sh --issue --webroot /var/www/aice-ps -d "$DOMAIN" || true
+              # 安装证书到固定路径，安装动作可重复执行
+              acme.sh --install-cert -d "$DOMAIN" \
+                --key-file       /etc/nginx/ssl/${DOMAIN}.key \
+                --fullchain-file /etc/nginx/ssl/${DOMAIN}.crt \
+                --reloadcmd     "nginx -t && (systemctl reload nginx || service nginx reload || true)" || true
+            else
+              echo "acme.sh 未安装成功，跳过证书签发"
+            fi
+
+      - name: Cleanup old static files
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: 22
+          script: |
+            set -e
+            mkdir -p /var/www/aice-ps
+            find /var/www/aice-ps -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+      - name: Upload dist to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: 22
+          source: "dist/*"
+          target: "/var/www/aice-ps"
+
+      - name: Validate and restart Nginx
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: 22
+          script: |
+            set -e
+            nginx -t
+            systemctl restart nginx || service nginx restart || true 

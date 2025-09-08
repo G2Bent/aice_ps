@@ -155,10 +155,10 @@ const StartScreen: React.FC<StartScreenProps> = ({ onFileSelect, onImageGenerate
   return (
     <div className="flex flex-col items-center gap-6 animate-fade-in w-full max-w-5xl mx-auto text-center p-4 sm:p-8">
       <h1 className="text-5xl font-extrabold tracking-tight text-gray-100 sm:text-6xl md:text-7xl">
-        Image AI <span className="text-blue-400">化繁为简</span>
+        Image AI <span className="text-blue-400">一键修图</span>
       </h1>
       <div className="max-w-2xl text-lg text-gray-400 md:text-xl flex flex-col gap-2">
-        <h3 className="text-3xl font-extrabold tracking-tight text-gray-100 sm:text-4xl md:text-5xl">至强改图模型&超好用应用</h3>
+        <h3 className="text-3xl font-extrabold tracking-tight text-gray-100 sm:text-4xl md:text-5xl">AI 时代，电商新一代修图工具</h3>
         {/* <p className="font-semibold text-yellow-300">用AiStudio后台API免费用</p> */}
       </div>
       
@@ -171,7 +171,7 @@ const StartScreen: React.FC<StartScreenProps> = ({ onFileSelect, onImageGenerate
                 <textarea
                     value={generationPrompt}
                     onChange={(e) => setGenerationPrompt(e.target.value)}
-                    placeholder="例如，“一只戴着宇航员头盔的小狗漂浮在多彩的星云中，数字艺术”"
+                    placeholder="例如，“一个穿着白色连衣裙的女孩，坐在沙发上，背景是蓝色的天空”"
                     className="w-full bg-gray-800 border border-gray-600 text-gray-200 rounded-lg p-4 focus:ring-2 focus:ring-purple-500 focus:outline-none transition text-base h-28 resize-none disabled:opacity-60"
                     disabled={isGenerating}
                 />

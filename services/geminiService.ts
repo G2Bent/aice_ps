@@ -95,7 +95,9 @@ const handleApiError = (error: any, action: string): Error => {
 // Helper to resize and convert image if necessary
 const resizeImageForApi = async (file: File): Promise<{ file: File, mimeType: string }> => {
     const SUPPORTED_MIME_TYPES = ['image/jpeg', 'image/png'];
-    const MAX_DIMENSION = 2048;
+    const MAX_DIMENSION = 1536;
+    const TARGET_MIME = 'image/jpeg';
+    const TARGET_QUALITY = 0.85;
 
     const needsConversion = !SUPPORTED_MIME_TYPES.includes(file.type);
 
@@ -144,18 +146,18 @@ const resizeImageForApi = async (file: File): Promise<{ file: File, mimeType: st
             canvas.height = newHeight;
             ctx.drawImage(image, 0, 0, newWidth, newHeight);
 
-            // Always convert to PNG when using canvas for simplicity and to handle transparency.
+            // Export as JPEG to greatly reduce payload size; transparency is not required for input
             canvas.toBlob(
                 (blob) => {
                     if (!blob) {
                         return reject(new Error('Failed to create blob from canvas.'));
                     }
-                    const newFileName = (file.name.split('.').slice(0, -1).join('.') || 'image') + '.png';
-                    const newFile = new File([blob], newFileName, { type: 'image/png' });
-                    resolve({ file: newFile, mimeType: 'image/png' });
+                    const newFileName = (file.name.split('.').slice(0, -1).join('.') || 'image') + '.jpg';
+                    const newFile = new File([blob], newFileName, { type: TARGET_MIME });
+                    resolve({ file: newFile, mimeType: TARGET_MIME });
                 },
-                'image/png',
-                0.95
+                TARGET_MIME,
+                TARGET_QUALITY
             );
         };
 
@@ -256,10 +258,12 @@ export const generateImageFromText = async (prompt: string, aspectRatio: string)
         // 该路径无需 Imagen 付费能力；通过纯文本 part 请求图像输出
         try {
             const ai = getGoogleAI();
-            const fallbackResponse: GenerateContentResponse = await ai.models.generateContent({
+            // 第一次尝试：强制仅返回图片
+            const safePrompt = `Generate a family-friendly, safe, photorealistic image. Subject: ${prompt}. Return an image only (PNG).`;
+            let fallbackResponse: GenerateContentResponse = await ai.models.generateContent({
                 model: 'gemini-2.5-flash-image-preview',
-                contents: { parts: [{ text: prompt }] },
-                config: { responseModalities: [Modality.IMAGE, Modality.TEXT] },
+                contents: { parts: [{ text: safePrompt }] },
+                config: { responseModalities: [Modality.IMAGE] },
             });
             const fallbackCandidate = fallbackResponse.candidates?.[0];
             if (fallbackCandidate?.content?.parts) {
@@ -269,11 +273,22 @@ export const generateImageFromText = async (prompt: string, aspectRatio: string)
                     }
                 }
             }
-            // 若 fallback 返回文本，沿用统一错误处理
-            if (fallbackCandidate?.content?.parts?.[0]?.text) {
-                throw new Error("Model responded with text instead of an image. The prompt may have been blocked.");
+            // 若 fallback 返回文本，再尝试更保守的提示词
+            const conservativePrompt = `Create a harmless, SFW, generic scene: ${prompt}. No text, no logos, no symbols. Output image only.`;
+            fallbackResponse = await ai.models.generateContent({
+                model: 'gemini-2.5-flash-image-preview',
+                contents: { parts: [{ text: conservativePrompt }] },
+                config: { responseModalities: [Modality.IMAGE] },
+            });
+            const secondCandidate = fallbackResponse.candidates?.[0];
+            if (secondCandidate?.content?.parts) {
+                for (const part of secondCandidate.content.parts) {
+                    if (part.inlineData) {
+                        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                    }
+                }
             }
-            throw new Error('AI 未能返回预期的图片结果。');
+            throw new Error('Model responded with text instead of an image. The prompt may have been blocked.');
         } catch (fallbackErr) {
             throw handleApiError(fallbackErr, '生成图片');
         }
@@ -348,8 +363,16 @@ export const generateTexturedImage = async (imageFile: File, prompt: string): Pr
 
 export const removeBackgroundImage = async (imageFile: File): Promise<string> => {
     const imagePart = await fileToGenerativePart(imageFile);
-    const textPart = { text: 'Remove the background of this image, leaving only the main subject with a transparent background.' };
-    return callImageEditingModel([imagePart, textPart], '抠图');
+    const primary = { text: 'Remove the background of this image. Keep only the main subject with a completely transparent background (PNG). Return an image only.' };
+    try {
+        return await callImageEditingModel([imagePart, primary], '抠图');
+    } catch (error) {
+        if (error instanceof Error && error.message.includes('Model responded with text')) {
+            const fallback = { text: 'Background removal: isolate the main subject. Output image with transparent background (alpha), no text, no borders.' };
+            return await callImageEditingModel([imagePart, fallback], '抠图 (fallback)');
+        }
+        throw error;
+    }
 };
 
 export const generateFusedImage = async (mainImage: File, sourceImages: File[], prompt: string): Promise<string> => {

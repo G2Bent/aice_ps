@@ -53,8 +53,7 @@ jobs:
                 ufw allow 443/tcp || true
               fi
             elif command -v yum >/dev/null 2>&1; then
-              yum install -y epel-release || true
-              yum install -y nginx curl socat sed
+              yum install -y nginx curl socat sed || true
               systemctl enable nginx || true
               if command -v firewall-cmd >/dev/null 2>&1; then
                 firewall-cmd --add-service=http --permanent || true
@@ -62,7 +61,7 @@ jobs:
                 firewall-cmd --reload || true
               fi
             elif command -v dnf >/dev/null 2>&1; then
-              dnf install -y nginx curl socat sed
+              dnf install -y nginx curl socat sed || true
               systemctl enable nginx || true
               if command -v firewall-cmd >/dev/null 2>&1; then
                 firewall-cmd --add-service=http --permanent || true
@@ -71,16 +70,63 @@ jobs:
               fi
             fi
 
-            # 写入 Nginx 配置模板（保留变量占位，后续统一替换）
+            # 选择 Nginx 配置路径
             if [ -d /etc/nginx/conf.d ]; then
               NGINX_CONF="/etc/nginx/conf.d/aice-ps.conf"
             else
               mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled || true
               NGINX_CONF="/etc/nginx/sites-available/aice-ps"
+              ln -sf /etc/nginx/sites-available/aice-ps /etc/nginx/sites-enabled/aice-ps || true
             fi
 
+            # 第一阶段：仅 HTTP 配置，保证 nginx 可用，供 ACME 校验
             cat > "$NGINX_CONF" <<'EOF'
-            # HTTP server: 用于 ACME 校验并 301 跳转到 HTTPS
+            server {
+              listen 80;
+              server_name __DOMAIN__;
+
+              root /var/www/aice-ps;
+              index index.html;
+
+              location ^~ /.well-known/acme-challenge/ {
+                root /var/www/aice-ps;
+                default_type "text/plain";
+                allow all;
+              }
+
+              location / {
+                try_files $uri $uri/ /index.html;
+              }
+
+              types {
+                application/wasm wasm;
+              }
+            }
+            EOF
+            sed -i "s/__DOMAIN__/$DOMAIN/g" "$NGINX_CONF"
+            nginx -t
+            systemctl restart nginx || service nginx restart || true
+
+            # 安装 acme.sh（若未安装），并使用 webroot 签发证书
+            if [ ! -d "$HOME/.acme.sh" ]; then
+              curl -s https://get.acme.sh | sh -s email=${EMAIL:-admin@${DOMAIN}}
+              export PATH="$HOME/.acme.sh:$PATH"
+            fi
+            if [ -f "$HOME/.acme.sh/acme.sh" ]; then
+              export PATH="$HOME/.acme.sh:$PATH"
+              acme.sh --set-default-ca --server letsencrypt || true
+              acme.sh --issue --webroot /var/www/aice-ps -d "$DOMAIN" || true
+              acme.sh --install-cert -d "$DOMAIN" \
+                --key-file       /etc/nginx/ssl/${DOMAIN}.key \
+                --fullchain-file /etc/nginx/ssl/${DOMAIN}.crt \
+                --reloadcmd     "nginx -t && (systemctl reload nginx || service nginx reload || true)" || true
+            else
+              echo "acme.sh 未安装成功，跳过证书签发"
+            fi
+
+            # 第二阶段：启用 HTTPS + 强制跳转
+            cat > "$NGINX_CONF" <<'EOF'
+            # HTTP server: 仅用于 ACME 校验与 301 跳转
             server {
               listen 80;
               server_name __DOMAIN__;
@@ -105,8 +151,9 @@ jobs:
 
             # HTTPS server
             server {
-              listen 443 ssl http2;
+              listen 443 ssl;
               server_name __DOMAIN__;
+              http2 on;
 
               ssl_certificate     /etc/nginx/ssl/__DOMAIN__.crt;
               ssl_certificate_key /etc/nginx/ssl/__DOMAIN__.key;
@@ -126,36 +173,9 @@ jobs:
               }
             }
             EOF
-
-            # 适配 sites-enabled 软链接
-            if [ "$NGINX_CONF" = "/etc/nginx/sites-available/aice-ps" ]; then
-              ln -sf /etc/nginx/sites-available/aice-ps /etc/nginx/sites-enabled/aice-ps || true
-            fi
-
-            # 用实际域名替换占位符（保持 $uri 等 Nginx 变量不被提前展开）
             sed -i "s/__DOMAIN__/$DOMAIN/g" "$NGINX_CONF"
-
             nginx -t
             systemctl restart nginx || service nginx restart || true
-
-            # 安装 acme.sh（若未安装）
-            if [ ! -d "$HOME/.acme.sh" ]; then
-              curl -s https://get.acme.sh | sh -s email=${EMAIL:-admin@${DOMAIN}}
-              export PATH="$HOME/.acme.sh:$PATH"
-            fi
-            if [ -f "$HOME/.acme.sh/acme.sh" ]; then
-              export PATH="$HOME/.acme.sh:$PATH"
-              acme.sh --set-default-ca --server letsencrypt || true
-              # 申请或续签证书（webroot 模式，使用 /var/www/aice-ps）
-              acme.sh --issue --webroot /var/www/aice-ps -d "$DOMAIN" || true
-              # 安装证书到固定路径，安装动作可重复执行
-              acme.sh --install-cert -d "$DOMAIN" \
-                --key-file       /etc/nginx/ssl/${DOMAIN}.key \
-                --fullchain-file /etc/nginx/ssl/${DOMAIN}.crt \
-                --reloadcmd     "nginx -t && (systemctl reload nginx || service nginx reload || true)" || true
-            else
-              echo "acme.sh 未安装成功，跳过证书签发"
-            fi
 
       - name: Cleanup old static files
         uses: appleboy/ssh-action@v1.0.3

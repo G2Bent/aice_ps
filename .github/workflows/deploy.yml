@@ -4,9 +4,19 @@ on:
   push:
     branches: [ "main" ]
   workflow_dispatch:
+    inputs:
+      action:
+        description: "选择操作（deploy 或 disable）"
+        required: true
+        type: choice
+        options:
+          - deploy
+          - disable
+        default: deploy
 
 jobs:
   build-and-deploy:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -26,6 +36,17 @@ jobs:
         env:
           # 可选：如需在前端打包时注入默认 key（注意会暴露在前端）
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Upload Nginx templates
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: 22
+          source: "deploy/nginx/*"
+          target: "/tmp"
+          strip_components: 2
 
       - name: Provision server (nginx, firewall, dir, ssl via acme.sh)
         uses: appleboy/ssh-action@v1.0.3
@@ -81,42 +102,7 @@ jobs:
             fi
 
             # 第一阶段：仅 HTTP 配置，保证 nginx 可用，供 ACME 校验
-            cat > "$NGINX_CONF" <<'EOF'
-            server {
-              listen 80;
-              server_name __DOMAIN__ __APEX__;
-
-              root /var/www/aice-ps;
-              index index.html;
-
-              # 允许较大的请求体，便于图片上传/处理
-              client_max_body_size 32m;
-
-              # 反向代理到上游（自建大陆可达反代）
-              location /genai/ {
-                proxy_pass http://124.156.242.227/;
-                proxy_set_header Host generativelanguage.googleapis.com;
-                proxy_set_header X-Forwarded-For $server_addr;
-                proxy_set_header X-Forwarded-Proto $scheme;
-                proxy_http_version 1.1;
-                proxy_read_timeout 300s;
-                proxy_connect_timeout 60s;
-                proxy_send_timeout 300s;
-              }
-
-              location ^~ /.well-known/acme-challenge/ {
-                root /var/www/aice-ps;
-                default_type "text/plain";
-                allow all;
-              }
-
-              location / {
-                try_files $uri $uri/ /index.html;
-              }
-            }
-            EOF
-            sed -i "s/__DOMAIN__/$DOMAIN/g" "$NGINX_CONF"
-            sed -i "s/__APEX__/$APEX_DOMAIN/g" "$NGINX_CONF"
+            sed -e "s/__DOMAIN__/$DOMAIN/g" -e "s/__APEX__/$APEX_DOMAIN/g" /tmp/aice-ps.http.conf > "$NGINX_CONF"
             nginx -t
             systemctl restart nginx || service nginx restart || true
 
@@ -138,78 +124,7 @@ jobs:
             fi
 
             # 第二阶段：启用 HTTPS + 强制跳转
-            cat > "$NGINX_CONF" <<'EOF'
-            # HTTP server: 仅用于 ACME 校验与 301 跳转
-            server {
-              listen 80;
-              server_name __DOMAIN__ __APEX__;
-
-              root /var/www/aice-ps;
-              index index.html;
-
-              # 允许较大的请求体
-              client_max_body_size 32m;
-
-              # 反向代理到上游（自建大陆可达反代）
-              location /genai/ {
-                proxy_pass http://124.156.242.227/;
-                proxy_set_header Host generativelanguage.googleapis.com;
-                proxy_set_header X-Forwarded-For $server_addr;
-                proxy_set_header X-Forwarded-Proto $scheme;
-                proxy_http_version 1.1;
-                proxy_read_timeout 300s;
-                proxy_connect_timeout 60s;
-                proxy_send_timeout 300s;
-              }
-
-              location ^~ /.well-known/acme-challenge/ {
-                root /var/www/aice-ps;
-                default_type "text/plain";
-                allow all;
-              }
-
-              location / {
-                return 301 https://$host$request_uri;
-              }
-            }
-
-            # HTTPS server
-            server {
-              listen 443 ssl;
-              server_name __DOMAIN__ __APEX__;
-              http2 on;
-
-              ssl_certificate     /etc/nginx/ssl/__DOMAIN__.crt;
-              ssl_certificate_key /etc/nginx/ssl/__DOMAIN__.key;
-
-              ssl_protocols TLSv1.2 TLSv1.3;
-              ssl_ciphers HIGH:!aNULL:!MD5;
-
-              root /var/www/aice-ps;
-              index index.html;
-
-              # 允许较大的请求体，便于图片上传/处理
-              client_max_body_size 32m;
-
-              # 反向代理到上游（自建大陆可达反代）
-              location /genai/ {
-                proxy_pass http://124.156.242.227/;
-                proxy_set_header Host generativelanguage.googleapis.com;
-                proxy_set_header X-Forwarded-For $server_addr;
-                proxy_set_header X-Forwarded-Proto $scheme;
-                proxy_http_version 1.1;
-                proxy_read_timeout 300s;
-                proxy_connect_timeout 60s;
-                proxy_send_timeout 300s;
-              }
-
-              location / {
-                try_files $uri $uri/ /index.html;
-              }
-            }
-            EOF
-            sed -i "s/__DOMAIN__/$DOMAIN/g" "$NGINX_CONF"
-            sed -i "s/__APEX__/$APEX_DOMAIN/g" "$NGINX_CONF"
+            sed -e "s/__DOMAIN__/$DOMAIN/g" -e "s/__APEX__/$APEX_DOMAIN/g" /tmp/aice-ps.https.conf > "$NGINX_CONF"
             nginx -t
             systemctl restart nginx || service nginx restart || true
 
@@ -296,3 +211,41 @@ jobs:
             set -e
             nginx -t
             systemctl restart nginx || service nginx restart || true 
+
+  disable-service:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'disable'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Disable service on server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: 22
+          script: |
+            set -e
+            echo "== Disabling aice-ps service =="
+
+            # 尝试禁用站点配置
+            if [ -d /etc/nginx/conf.d ]; then
+              [ -f /etc/nginx/conf.d/aice-ps.conf ] && mv /etc/nginx/conf.d/aice-ps.conf /etc/nginx/conf.d/aice-ps.conf.disabled || true
+            else
+              [ -L /etc/nginx/sites-enabled/aice-ps ] && rm -f /etc/nginx/sites-enabled/aice-ps || true
+            fi
+
+            # 尝试停止 Nginx 服务
+            systemctl stop nginx || service nginx stop || true
+
+            # 关闭常见防火墙的 80/443 端口
+            if command -v ufw >/dev/null 2>&1; then
+              ufw deny 80/tcp || true
+              ufw deny 443/tcp || true
+            fi
+            if command -v firewall-cmd >/dev/null 2>&1; then
+              firewall-cmd --remove-service=http --permanent || true
+              firewall-cmd --remove-service=https --permanent || true
+              firewall-cmd --reload || true
+            fi
+
+            echo "== Done. Service disabled. ==" 

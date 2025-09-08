@@ -34,7 +34,15 @@ const getBaseUrl = (): string | undefined => {
     } catch(e) {
       console.warn("Could not access localStorage for API base URL.", e);
     }
-    return undefined; // Return undefined to use the default endpoint
+    // 在生产环境默认通过本域反向代理，避免中国大陆直连被墙域名
+    if (typeof window !== 'undefined') {
+        const hostname = window.location.hostname;
+        const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.local');
+        if (!isLocalhost) {
+            return `${window.location.origin}/genai`;
+        }
+    }
+    return undefined; // Return undefined to use the default endpoint in本地开发
 }
 
 

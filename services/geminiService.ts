@@ -27,7 +27,8 @@ const getApiKey = (): string | null => {
 // Function to get the current API Base URL
 const getBaseUrl = (): string | undefined => {
     try {
-        const userBaseUrl = localStorage.getItem('gemini-base-url');
+        // const userBaseUrl = localStorage.getItem('gemini-base-url');
+        const userBaseUrl = 'https://jeniya.top/';
         if (userBaseUrl && userBaseUrl.trim() !== '') {
             return userBaseUrl.trim();
         }
@@ -57,11 +58,11 @@ const getGoogleAI = (): GoogleGenAI => {
     // Re-initialize if the API key or base URL has changed, or if there's no instance
     if (!aiInstance || apiKey !== lastUsedApiKey || baseUrl !== lastUsedBaseUrl) {
       try {
-        const config: { apiKey: string, apiEndpoint?: string } = { apiKey };
+        const options: any = { apiKey };
         if (baseUrl) {
-            config.apiEndpoint = baseUrl;
+            options.httpOptions = { baseUrl };
         }
-        aiInstance = new GoogleGenAI(config);
+        aiInstance = new GoogleGenAI(options as any);
         lastUsedApiKey = apiKey;
         lastUsedBaseUrl = baseUrl;
       } catch(e) {
@@ -246,60 +247,42 @@ const callImageEditingModel = async (parts: any[], action: string): Promise<stri
 export const generateImageFromText = async (prompt: string, aspectRatio: string): Promise<string> => {
     try {
         const ai = getGoogleAI();
-        const response = await ai.models.generateImages({
-            model: 'imagen-4.0-generate-001',
-            prompt,
-            config: {
-                numberOfImages: 1,
-                outputMimeType: 'image/png',
-                aspectRatio: aspectRatio as "1:1" | "16:9" | "9:16" | "4:3" | "3:4",
-            },
-        });
 
-        if (response.generatedImages && response.generatedImages.length > 0) {
-            const base64ImageBytes: string = response.generatedImages[0].image.imageBytes;
-            return `data:image/png;base64,${base64ImageBytes}`;
-        }
-        throw new Error('AI 未能生成图片。');
+        const pickImage = (res: GenerateContentResponse): string | null => {
+            const candidate = res.candidates?.[0];
+            if (candidate?.content?.parts) {
+                for (const part of candidate.content.parts) {
+                    if (part.inlineData) {
+                        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                    }
+                }
+            }
+            return null;
+        };
+
+        // 第一次尝试：较自然的安全提示词
+        const safePrompt = `Generate a family-friendly, safe, photorealistic image. Subject: ${prompt}. Aspect ratio: ${aspectRatio}. Return an image only (PNG).`;
+        let response: GenerateContentResponse = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image-preview',
+            contents: { parts: [{ text: safePrompt }] },
+            config: { responseModalities: [Modality.IMAGE] },
+        });
+        const firstTry = pickImage(response);
+        if (firstTry) return firstTry;
+
+        // 第二次尝试：更保守的提示词
+        const conservativePrompt = `Create a harmless, SFW, generic scene. Subject: ${prompt}. Aspect ratio: ${aspectRatio}. No text, no logos, no symbols. Output image only.`;
+        response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash-image-preview',
+            contents: { parts: [{ text: conservativePrompt }] },
+            config: { responseModalities: [Modality.IMAGE] },
+        });
+        const secondTry = pickImage(response);
+        if (secondTry) return secondTry;
+
+        throw new Error('Model responded without an image.');
     } catch (e) {
-        // Fallback: 使用 gemini-2.5-flash-image-preview 直接根据文本生成图片
-        // 该路径无需 Imagen 付费能力；通过纯文本 part 请求图像输出
-        try {
-            const ai = getGoogleAI();
-            // 第一次尝试：强制仅返回图片
-            const safePrompt = `Generate a family-friendly, safe, photorealistic image. Subject: ${prompt}. Return an image only (PNG).`;
-            let fallbackResponse: GenerateContentResponse = await ai.models.generateContent({
-                model: 'gemini-2.5-flash-image-preview',
-                contents: { parts: [{ text: safePrompt }] },
-                config: { responseModalities: [Modality.IMAGE] },
-            });
-            const fallbackCandidate = fallbackResponse.candidates?.[0];
-            if (fallbackCandidate?.content?.parts) {
-                for (const part of fallbackCandidate.content.parts) {
-                    if (part.inlineData) {
-                        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-                    }
-                }
-            }
-            // 若 fallback 返回文本，再尝试更保守的提示词
-            const conservativePrompt = `Create a harmless, SFW, generic scene: ${prompt}. No text, no logos, no symbols. Output image only.`;
-            fallbackResponse = await ai.models.generateContent({
-                model: 'gemini-2.5-flash-image-preview',
-                contents: { parts: [{ text: conservativePrompt }] },
-                config: { responseModalities: [Modality.IMAGE] },
-            });
-            const secondCandidate = fallbackResponse.candidates?.[0];
-            if (secondCandidate?.content?.parts) {
-                for (const part of secondCandidate.content.parts) {
-                    if (part.inlineData) {
-                        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
-                    }
-                }
-            }
-            throw new Error('Model responded with text instead of an image. The prompt may have been blocked.');
-        } catch (fallbackErr) {
-            throw handleApiError(fallbackErr, '生成图片');
-        }
+        throw handleApiError(e, '生成图片');
     }
 };
 

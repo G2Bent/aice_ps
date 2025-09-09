@@ -70,14 +70,14 @@ const Header: React.FC<HeaderProps> = ({ activeView, onViewChange, onOpenSetting
             >
               <QuestionMarkCircleIcon className="w-6 h-6" />
             </button>
-            <button
+            {/* <button
               onClick={onOpenSettings}
               className="p-2 text-gray-400 rounded-full hover:bg-white/10 hover:text-white transition-colors"
               aria-label="API 设置"
               title="API 设置"
-            >
-              <CogIcon className="w-6 h-6" />
-            </button>
+            > */}
+              {/* <CogIcon className="w-6 h-6" />
+            </button> */}
             {/* <a
               href="https://github.com/aigem/aice_ps"
               target="_blank"

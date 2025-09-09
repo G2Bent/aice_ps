@@ -260,25 +260,14 @@ export const generateImageFromText = async (prompt: string, aspectRatio: string)
             return null;
         };
 
-        // 第一次尝试：较自然的安全提示词
-        const safePrompt = `Generate a family-friendly, safe, photorealistic image. Subject: ${prompt}. Aspect ratio: ${aspectRatio}. Return an image only (PNG).`;
-        let response: GenerateContentResponse = await ai.models.generateContent({
+        const promptText = `Generate a family-friendly, safe, photorealistic image. Subject: ${prompt}. Aspect ratio: ${aspectRatio}. Return an image only (PNG).`;
+        const response: GenerateContentResponse = await ai.models.generateContent({
             model: 'gemini-2.5-flash-image-preview',
-            contents: { parts: [{ text: safePrompt }] },
+            contents: { parts: [{ text: promptText }] },
             config: { responseModalities: [Modality.IMAGE] },
         });
-        const firstTry = pickImage(response);
-        if (firstTry) return firstTry;
-
-        // 第二次尝试：更保守的提示词
-        const conservativePrompt = `Create a harmless, SFW, generic scene. Subject: ${prompt}. Aspect ratio: ${aspectRatio}. No text, no logos, no symbols. Output image only.`;
-        response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash-image-preview',
-            contents: { parts: [{ text: conservativePrompt }] },
-            config: { responseModalities: [Modality.IMAGE] },
-        });
-        const secondTry = pickImage(response);
-        if (secondTry) return secondTry;
+        const image = pickImage(response);
+        if (image) return image;
 
         throw new Error('Model responded without an image.');
     } catch (e) {
